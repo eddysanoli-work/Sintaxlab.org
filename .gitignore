@@ -1,0 +1,7 @@
+﻿terraform/.terraform
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/terraform.tfvars
+terraform/.terraform.lock.hcl
+ansible/configuration/hosts
+ansible/storage/docker/.env
