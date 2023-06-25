@@ -1,106 +1,79 @@
 /* ============================================ */
-/* EDDYSANOLI.COM LINODE                        */
+/* DROPLET                                      */
 /* ============================================ */
 
-# 2 GB Linode
-resource "linode_instance" "eddysanoli_server" {
-    label = "eddysanoli-server"
-    image = "linode/debian11"
-    region = "us-southeast"
+resource "digitalocean_droplet" "demo-app" {
+  image  = "ubuntu-20-04-x64"
+  name   = "demo-app"
+  region = "nyc3"
+  size   = "s-1vcpu-1gb"
+  ssh_keys = [
+    data.digitalocean_ssh_key.main.id
+  ]
 
-    # All linode terraform types:
-    # https://api.linode.com/v4/linode/types
-    type = "g6-standard-1" 
+  # Setup an SSH connection to the droplet
+  connection {
+    host        = self.ipv4_address
+    user        = "root"
+    type        = "ssh"
+    private_key = file(var.PRIVATE_SSH_KEY_PATH)
+    timeout     = "2m"
+  }
 
-    # Root password for the nanode
-    root_pass = var.LINODE_ROOT_PASS
+  # Render the "hosts.tpl" template that will be used by Ansible 
+  provisioner "local-exec" {
 
-    # Authorized SSH keys
-    authorized_keys = [
-        var.PUBLIC_SSH_KEY
-    ]
+    # Fill content of the hosts file in "ansible/hosts" using the "hosts.tpl" template
+    command = templatefile("hosts.tpl", {
+      server_ip = self.ipv4_address
+    })
 
-    # Render the "hosts.tpl" template that will be used by Ansible 
-    provisioner "local-exec" {
-
-        # Fill content of the hosts file in "ansible/hosts" using the "hosts.tpl" template
-        command = templatefile("hosts.tpl", {
-            server_ip = self.ip_address
-        })
-
-        # Run it using bash
-        interpreter = ["bash", "-c"]
-    }
+    # Run it using bash
+    interpreter = ["bash", "-c"]
+  }
 }
 
 /* ============================================ */
 /* DOMAIN                                       */
 /* ============================================ */
 
-# Eddysanoli.com domain 
-resource "linode_domain" "eddysanoli_domain" {
+resource "digitalocean_domain" "sintaxlab" {
+  name       = var.DOMAIN_NAME
+  ip_address = digitalocean_droplet.demo-app.ipv4_address
+}
 
-    # Namecheap domain
-    domain = "eddysanoli.com"
+# A Record: Associates a domain name with an IP address
+resource "digitalocean_record" "A-record" {
+  domain = digitalocean_domain.sintaxlab.name
+  type   = "A"
+  name   = "www"
+  value  = digitalocean_droplet.demo-app.ipv4_address
+}
 
-    # Either "master" or "slave". Master domains are authoritative for their
-    # domain, and slave domains are not.
-    type = "master"
-
-    # Address that reaches you but its outside your domain and ideally
-    # doesn't require your linode to be operational. Gmail for example
-    soa_email = "eddysanoli@gmail.com"
-
-    # TTL (Time to Live) for the domain cache
-    # Note: This is not respected by all DNS servers. Its more of a suggestion
-    ttl_sec = 3600
+# CNAME Record: Associates a subdomain with a domain name
+resource "digitalocean_record" "DEMO-CNAME-record" {
+  domain = digitalocean_domain.sintaxlab.name
+  type   = "CNAME"
+  name   = "demo"
+  value  = "@"
 }
 
 /* ============================================ */
-/* DOMAIN RECORDS                               */
+/* NAMECHEAP NAMESERVERS                        */
 /* ============================================ */
 
-# "Eddysanoli" Main Domain Record (No Prefix)
-# (eg. eddysanoli.com)
-resource "linode_domain_record" "eddysanoli_domain_record" {
-    domain_id = linode_domain.eddysanoli_domain.id
-    name = "eddysanoli.com"
-    record_type = "A"
-    target = linode_instance.eddysanoli_server.ip_address
+# Add the nameservers of the hosted zone to the domain
+# (Make sure that your IP address is whitelisted in the API settings of Namecheap)
+resource "namecheap_domain_records" "sintaxlab-org" {
+  domain = var.DOMAIN_NAME
 
-    # How often the record refreshes its cache
-    # Note: This may not be respected by all DNS servers. Its more of a suggestion
-    ttl_sec = 3600
-}
+  # Remove the previous nameservers and add the new ones
+  mode = "OVERWRITE"
 
-# "EddysanolI" www Domain Record
-# (eg. www.eddysanoli.com)
-resource "linode_domain_record" "eddysanoli_domain_record_www" {
-    domain_id = linode_domain.eddysanoli_domain.id
-    name = "www.eddysanoli.com"
-    record_type = "CNAME"
-
-    # This wont target to the IP address of the linode instance
-    # but the "A" record of the domain name so that both lead to the same page
-    target = "eddysanoli.com" 
-
-    # TTL (Time to live). Frequency for record cache refresh in seconds
-    # Note: This may not be respected by all DNS servers. Its more of a suggestion
-    ttl_sec = 3600
-}
-
-# "EddysanolI" bot Domain Record / For the discord bot
-# (eg. bot.eddysanoli.com)
-resource "linode_domain_record" "eddysanoli_domain_record_bot" {
-    domain_id = linode_domain.eddysanoli_domain.id
-    name = "bot.eddysanoli.com"
-    record_type = "CNAME"
-
-    # This wont target to the IP address of the linode instance
-    # but the "A" record of the domain name so that both lead to the same page
-    target = "eddysanoli.com" 
-
-    # TTL (Time to live). Frequency for record cache refresh in seconds
-    # Note: This may not be respected by all DNS servers. Its more of a suggestion
-    ttl_sec = 3600
+  # The nameservers from the "noobsquad.xyz" main hosted zone
+  nameservers = [
+    "ns1.digitalocean.com",
+    "ns2.digitalocean.com",
+    "ns3.digitalocean.com"
+  ]
 }
