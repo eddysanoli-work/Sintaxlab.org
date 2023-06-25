@@ -5,3 +5,4 @@ terraform/terraform.tfvars
 terraform/.terraform.lock.hcl
 ansible/configuration/hosts
 ansible/storage/docker/.env
+ansible/storage/.env
