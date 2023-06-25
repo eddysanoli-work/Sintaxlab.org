@@ -32,6 +32,9 @@
         name:
           - git
           - python3-pip
+          - nginx
+          - snapd
+          - tmux
         state: latest
 
     # ---------------------------------------------- #
@@ -95,6 +98,13 @@
     - name: Install Requirements for the "HormoziGPT" Repo
       pip:
         requirements: ~/HormoziGPT/requirements.txt 
+
+    # If we don't do this, the requirements.txt file will generate a conflict for the 
+    # Jinja2 version used by Pandas.
+    - name: Upgrade Jinja2
+      pip:
+        name: jinja2
+        state: latest
     
     - name: Copy Environment Variables (.env)
       copy:
@@ -113,3 +123,45 @@
       with_items:
         - 'export $(cat ~/HormoziGPT/.env | xargs)'
 
+    # -------------------------------------------- #
+
+    - name: Delete Default Nginx Config File
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+
+    - name: Copy Nginx Config FIle
+      copy:
+        src: "{{ local_storage }}/nginx.conf"
+        dest: /etc/nginx/sites-available/sintaxlab
+
+    - name: Create Symbolic Link for Nginx Config File
+      file:
+        src: /etc/nginx/sites-available/sintaxlab
+        dest: /etc/nginx/sites-enabled/sintaxlab
+        state: link
+
+    - name: Reload Nginx Configuration
+      shell: "nginx -s reload"
+
+    # -------------------------------------------- #
+
+    - name: Install Certbot using Snapd
+      shell: snap install --classic certbot
+
+    - name: Create a Symbolic Link for Snapd's Certbot
+      file:
+        src: /snap/bin/certbot
+        dest: /usr/bin/certbot
+        state: link
+
+    # Explanation of Parameters
+    # - --nginx: Use the Nginx plugin
+    # - --non-interactive: Don't ask for confirmations or input from the user
+    # - --agree-tos: Agree to the Terms of Service automatically
+    # - --expand: If a certificate already exists, expand it to include the new domains or changes
+    # - -m email@email.com: Email address used to notify the user about certificate expiration
+    # - -d domain: Add a certificate to the given domain. Can be used multiple times
+    - name: Start Certbot for Nginx (Add SSL Certificate to Site)
+      shell: "certbot --nginx --non-interactive --agree-tos --expand -m eddysanoli@gmail.com -d sintaxlab.org -d www.sintaxlab.org -d demo.sintaxlab.org"
+    
